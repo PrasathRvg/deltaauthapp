@@ -8,21 +8,51 @@ app.use(express.json());
 var cookieParser = require('cookie-parser');
 app.use(cookieParser());
 
+var session = require('express-session');
+app.use(session({secret: "Shh, its a secret!"}));
+
 app.set('view engine', 'pug');
 app.set('views','./views');
 
 app.get("/",function(req,res){
+    console.log(req.session)
     res.sendFile(__dirname+"/home.html")
 })
 app.get("/aboutus",function(req,res){
     res.sendFile(__dirname+"/aboutus.html")
 })
-app.get("/products",function(req,res){
-    console.log("req cookies for prod req::",req.cookies)
-    res.render("products")
+
+function authenticate(req,res,next){
+    if(req.session.username){
+        MongoClient.connect(url,function(err,conn){
+            var db = conn.db("delta");
+            db.collection("users").find({username:req.session.username})
+            .toArray(function(err,data){
+                console.log(data)
+                if(data.length===0){
+                   res.send("Please register first");                 
+                }
+                else{                    
+                    if(data[0].pwd===req.session.pwd){                       
+                       next();
+                    }  
+                    else{
+                        res.redirect("/loginForm.html")
+                    }                     
+                }
+            })
+        })
+    } 
+    else{
+        res.redirect("/loginForm")
+    }
+}
+app.get("/products",authenticate,function(req,res){
+      res.render("products",{
+          user:req.session
+      })
 })
-app.get("/services",function(req,res){
-    console.log("req cookies for prod req::",req.cookies)
+app.get("/services",authenticate,function(req,res){
     res.render("services")
 })
 app.get("/signupform",function(req,res){
@@ -51,7 +81,7 @@ app.post("/register",function(req,res){
     
     }
 })
-app.get("/loginform",function(req,res){
+app.get("/loginform",function(req,res){    
     res.sendFile(__dirname+"/login.html")
 })
 app.post("/login",function(req,res){
@@ -64,8 +94,8 @@ app.post("/login",function(req,res){
             }
             else{
                 if(data[0].pwd===req.body.pwd){
-                    res.cookie("username",req.body.username);
-                    res.cookie("pwd",req.body.pwd);
+                    req.session.username = req.body.username
+                    req.session.pwd = req.body.pwd;
                     res.send("login successful")
                 }  
                 else{
